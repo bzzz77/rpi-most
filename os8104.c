@@ -13,10 +13,36 @@ static int fd;
 #include <string.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include <linux/types.h>
-#include <linux/spi/spidev.h>
 #include "os8104.h"
 #include "gpio.h"
+
+#ifndef __linux__
+typedef unsigned long long __u64;
+typedef unsigned long __u32;
+typedef unsigned short __u16;
+typedef unsigned char __u8;
+
+#define SPI_IOC_WR_MODE	0
+#define SPI_IOC_RD_MODE 0
+#define SPI_IOC_WR_BITS_PER_WORD 0
+#define SPI_IOC_RD_BITS_PER_WORD 0
+#define SPI_IOC_RD_MAX_SPEED_HZ 0
+#define SPI_IOC_WR_MAX_SPEED_HZ 0
+#define SPI_IOC_MESSAGE(a)	0
+
+struct spi_ioc_transfer {
+	__u64		tx_buf;
+	__u64		rx_buf;
+
+	__u32		len;
+	__u32		speed_hz;
+
+	__u16		delay_usecs;
+	__u8		bits_per_word;
+	__u8		cs_change;
+	__u32		pad;
+};
+#endif
 
 static void pabort(const char *s)
 {
@@ -54,6 +80,18 @@ char *os8104_bXSR()
                         val & 0x02 ? "ESL " : "",
                         val & 0x01 ? "EXL " : "");
         return msg;
+}
+
+char *os8104_bCM2()
+{
+	static char msg[32];
+	unsigned char val;
+
+	val = os8104_readbyte(bCM2);
+	snprintf(msg, sizeof(msg), "bCM2{%s%s}",
+		val & 0x80 ? "!LOC " : "LOC ",
+		val & 0x40 ? "NAC " : "");
+	return msg;
 }
 
 void gpio_init(void)
@@ -234,7 +272,7 @@ unsigned char os8104_readbyte(unsigned reg)
 
 int os8104_writebyte(unsigned reg, unsigned char value)
 {
-	char tx1[2];
+	char tx1[4];
 	struct spi_ioc_transfer tr[1] = { 0 };
 	int rc;
 
@@ -257,9 +295,12 @@ int os8104_writebyte(unsigned reg, unsigned char value)
 
 void os8104_readbytes(unsigned reg, unsigned char *buf, int len)
 {
-	char tx1[2], tx2[2], rx[2];
+	char tx1[2], tx2[2], rx[2], tmp[20];
 	struct spi_ioc_transfer tr[2] = { 0 };
 	int rc, i;
+
+	if (len + 1 > sizeof(tmp))
+		pabort("too small buffer");
 
 	for (i = 0; i < 2; i++) {
 		tr[i].delay_usecs = delay;
@@ -277,20 +318,22 @@ void os8104_readbytes(unsigned reg, unsigned char *buf, int len)
 	tr[0].len = 2;
 
 	tr[1].tx_buf = (unsigned long)tx2;
-	tr[1].rx_buf = (unsigned long)buf;
-	tr[1].len = len;
+	tr[1].rx_buf = (unsigned long)tmp;
+	tr[1].len = len + 1;
 
 	rc = ioctl(fd, SPI_IOC_MESSAGE(2), tr);
 	if (rc < 1)
 		pabort("can't send spi message");
+	memcpy(buf, tmp + 1, len);
 }
 
 int os8104_writebytes(unsigned reg, unsigned char *val, int len)
 {
-	char tx1[2];
+	char tx1[2], tmp[20];
 	struct spi_ioc_transfer tr[2] = { 0 };
 	int rc, i;
 
+	memcpy(tmp + 1, val, len);
 	tx1[0] = 0x40;
 	tx1[1] = reg;
 
@@ -314,4 +357,30 @@ int os8104_writebytes(unsigned reg, unsigned char *val, int len)
 	return 0;
 }
 
+int os8104_sai(int nal, int nah)
+{
+	unsigned val;
+
+	os8104_writebyte(0xC3, nal);
+	os8104_writebyte(0xC2, nah);
+	os8104_writebyte(bMSGC, bMSGC_SAI);
+	do {
+		usleep(1000);
+		val = os8104_readbyte(bMSGS);
+	} while (!(val & bMSGS_MTX));
+	os8104_writebyte(bMSGC, bMSGC_RMTX);
+	return !!(val & bMSGS_TXR);
+}
+
+void os8104_init_addr(void)
+{
+	int i;
+	for (i = 1; i < 16; i++) {
+		if (os8104_sai(i, 0) == 0)
+			continue;
+		printf("got addr %d\n", i);
+		return;
+	}
+	printf("CAN'T GET ADDR\n");
+}
 

@@ -5,8 +5,10 @@
 #include <string.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#ifdef __linux__
 #include <linux/types.h>
 #include <linux/spi/spidev.h>
+#endif
 
 
 /* registers */
@@ -58,4 +60,6 @@ void os8104_readbytes(unsigned reg, unsigned char *buf, int len);
 int os8104_writebytes(unsigned reg, unsigned char *val, int len);
 char *os8104_bMSGS();
 char *os8104_bXSR();
+char *os8104_bCM2();
+void os8104_init_addr(void);
 
