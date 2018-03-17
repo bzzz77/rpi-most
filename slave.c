@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
 			continue;
 		//printf("!! %s INT:%d\n", os8104_bMSGS(), 0/*gpio_read(12)*/);
 		if (val & bMSGS_MRX) {
-			char buf[32];
+			unsigned char buf[32];
 			int i;
 			os8104_readbytes(0xA0, buf, 19);
 			printf("RECEIVED: ");
@@ -90,14 +90,14 @@ int main(int argc, char *argv[])
 
 		if (rc == 0)
 			continue;
-		if (fdset[0].revents & POLLPRI == 0)
+		if ((fdset[0].revents & POLLPRI) == 0)
 			continue;
 		gpio_read(12);
 
 check:
 		val = os8104_readbyte(bMSGS);
 		if (val & bMSGS_MRX) {
-			char buf[32];
+			unsigned char buf[32];
 			int i;
 			os8104_readbytes(0xA0, buf, 19);
 			printf("RECEIVED: ");

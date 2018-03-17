@@ -51,8 +51,8 @@ int main(int argc, char *argv[])
 		os8104_writebyte(bMSGC, bMSGC_STX);
 		do {
 			val = os8104_readbyte(bMSGS);
-		} while (val & bMSGS_MTX == 0);
-		if (val & bMSGS_TXR == 0) {
+		} while ((val & bMSGS_MTX) == 0);
+		if ((val & bMSGS_TXR) == 0) {
 			printf("ERROR\n");
 			continue;
 		} else
@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
 				os8104_bXSR());
 		val = os8104_readbyte( 0x86);
 		if (val & 0x01) {
-			if (val & 0x40 == 0)
+			if ((val & 0x40) == 0)
 				printf("TX ERR: %02x\n",
 					os8104_readbyte(0xd5));
 			os8104_writebyte(0x85, 0x01);
